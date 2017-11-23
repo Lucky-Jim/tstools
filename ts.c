@@ -2143,8 +2143,12 @@ extern void report_adaptation_timing(timing_p    times,
 
   if (got_pcr)
   {
+    fprint_msg(" .. PCR %12" LLU_FORMAT_STUMP, pcr);
+
     if (got_private)
     {
+
+
       // fragment
       if (ON(marker.flags,0x80))
       {
@@ -2166,7 +2170,6 @@ extern void report_adaptation_timing(timing_p    times,
       }
     }
 
-    fprint_msg(" .. PCR %12" LLU_FORMAT_STUMP, pcr);
     if (!times->had_first_pcr)
     {
       times->last_pcr_packet = times->first_pcr_packet = packet_count;
@@ -2190,6 +2193,7 @@ extern void report_adaptation_timing(timing_p    times,
        if (got_private)
        {
 
+
          if (ON(marker.flags, 0x80))
          {
            fprint_msg(" Last fragment % " LLU_FORMAT_STUMP ,
@@ -2204,12 +2208,33 @@ extern void report_adaptation_timing(timing_p    times,
            times->last_segment_pcr = pcr;
 
          }
+         else
+         {
+           fprint_msg("                  ");
+         }
        }
       }
     }
     times->last_pcr_packet = packet_count;
     times->last_pcr = pcr;
+
+
+    if( got_private )
+    {
+      fprint_msg("    EBP flags( " );
+      if (ON(marker.flags,0x80)) print_msg(" fragment ");
+      if (ON(marker.flags,0x40)) print_msg(" segment ");
+      if (ON(marker.flags,0x20)) print_msg(" SAP ");
+      if (ON(marker.flags,0x10)) print_msg(" grouping ");
+      if (ON(marker.flags,0x08)) print_msg(" time ");
+      if (ON(marker.flags,0x04)) print_msg(" concealment ");
+      if (ON(marker.flags,0x01)) print_msg(" extention ");
+      fprint_msg(")" );
+
+    }
     print_msg("\n");
+
+
   }
   return;
 }

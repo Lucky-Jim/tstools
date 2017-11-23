@@ -142,7 +142,7 @@
 // 3     BF    1011 1111  private_stream_2
 //       C0-DF 110x xxxx  ISO/IEC 13818-3 or ISO/IEC 11172-3 or
 //                        ISO/IEC 13818-7 or ISO/IEC 14496-3 audio stream
-//                        number x xxxx 
+//                        number x xxxx
 //       Ex    1110 xxxx  ITU-T Rec. H.262 | ISO/IEC 13818-2, ISO/IEC 11172-2,
 //                        ISO/IEC 14496-2 or ITU-T Rec. H.264 | ISO/IEC
 //                        14496-10 video stream number xxxx
@@ -160,14 +160,14 @@
 //       FA    1111 1010  ISO/IEC14496-1_SL-packetized_stream
 //       FB    1111 1011  ISO/IEC14496-1_FlexMux_stream
 //       FC    1111 1100  descriptive data stream
-//       FD    1111 1101  reserved data stream 
+//       FD    1111 1101  reserved data stream
 //       FE    1111 1110  reserved data stream
 // 4     FF    1111 1111  program_stream_directory
-// 
+//
 //   The notation x means that the values '0' or '1' are both permitted and
 //   results in the same stream type. The stream number is given by the values
 //   taken by the x's.
-// 
+//
 // NOTES
 // 1  PES packets of type program_stream_map have unique syntax specified
 //    in 2.5.4.1.
@@ -204,9 +204,28 @@ struct timing
   uint64_t  last_pcr;
   int       first_pcr_packet;
   int       last_pcr_packet;
+
+
+  uint64_t       first_segment_pcr;
+  uint64_t       last_segment_pcr;
+  int       had_first_segment;
+
+  uint64_t       first_fragment_pcr;
+  uint64_t       last_fragment_pcr;
+  int       had_first_fragment;
+
+
   int       had_first_pcr;   // FALSE until we've started
 };
 typedef struct timing *timing_p;
+
+struct ebp
+{
+  int      segment;
+  int      fragment;
+  byte     flags;
+};
+typedef struct ebp *ebp_t;
 
 #endif // _h222_defns
 

@@ -505,7 +505,7 @@ static int report_buffering_stats(TS_reader_p  tsreader,
                            ss->pid, cc, posn);
               }
             }
-  
+
             // Whilst everything else must be identical PCR is expected to
             // change if it is given.  If it exists we know where it is.
             if (!got_pcr ? (memcmp(ss->last_pkt, packet, 188) != 0) :
@@ -902,11 +902,13 @@ static int report_ts(TS_reader_p  tsreader,
                      int          report_timing)
 {
   struct timing times = {0};
+
   pidint_list_p prog_list = NULL;
   pmt_p         pmt = NULL;
   int           err;
   int           count = 0;
   timing_p      time_ptr = NULL;
+  
 
   byte     *pat_data = NULL;
   int       pat_data_len = 0;
@@ -916,6 +918,7 @@ static int report_ts(TS_reader_p  tsreader,
   byte     *pmt_data = NULL;
   int       pmt_data_len = 0;
   int       pmt_data_used = 0;
+
 
   if (report_timing)
     time_ptr = &times;

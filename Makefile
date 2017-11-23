@@ -88,9 +88,9 @@ LFS_FLAGS = -D_FILE_OFFSET_BITS=64
 
 # Try for a best guess whether this is a Mac running OS/X, or some other
 # sort of thing (presumably Linux or BSD)
-ifeq ($(shell uname -s), Darwin)
+ifeq ($(shell uname -s), xxDarwin)
 	SYSTEM = "macosx"
-	ARCH_FLAGS =
+        #	ARCH_FLAGS = --macosx_version_min=10.11
 	# If you're still building on a version of Mac OS X that supports powerpc,
 	# then you may want to uncomment the next line. Obviously, this no longer
 	# works in Lion, which doesn't support powerpc machines any more.
@@ -173,7 +173,7 @@ TEST_OBJS = \
 STATIC_LIB = $(LIBDIR)/libtstools.a
 LIBOPTS = $(ARCH_FLAGS) $(STATIC_LIB)
 
-ifeq ($(shell uname -s), Darwin)
+ifeq ($(shell uname -s), xxDarwin)
 SHARED_LIB_NAME = libtstools.xxx
 else
 SHARED_LIB_NAME = libtstools.so
@@ -215,14 +215,14 @@ TEST_PRINTING_PROG = $(BINDIR)/test_printing
 TEST_PROGS = test_nal_unit_list test_es_unit_list
 
 # ------------------------------------------------------------
-all:	$(BINDIR) $(LIBDIR) $(OBJDIR) $(PROGS) $(SHARED_LIB)
+all:	$(BINDIR) $(LIBDIR) $(OBJDIR) $(PROGS) 
 
 # ts2ps is not yet an offical program, so for the moment build
 # it separately
 .PHONY: ts2ps
 ts2ps:	$(TS2PS_PROG)
 
-ifeq ($(shell uname -s), Darwin)
+ifeq ($(shell uname -s), xxDarwin)
 # Make libraries containing universal objects on Mac
 $(STATIC_LIB): $(OBJS)
 	libtool -static $(OBJS) -o $(STATIC_LIB)
@@ -234,7 +234,7 @@ $(STATIC_LIB): $(OBJS)
 	ar rc $(STATIC_LIB) $(OBJS)
 
 $(SHARED_LIB): $(OBJS)
-	$(LD) -shared -soname $(SHARED_LIB_NAME).$(TSTOOLS_LIB_VERSION) -o $(SHARED_LIB) $(OBJS) -lc -lm
+	$(LD) -dynamic -o $(SHARED_LIB) $(OBJS) -lc -lm
 endif
 
 # Build all of the utilities with the static library, so that they can

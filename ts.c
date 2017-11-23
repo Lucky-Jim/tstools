@@ -423,7 +423,7 @@ static int write_some_TS_PES_packet(TS_writer_p  output,
 #endif
     }
   }
-  
+
   if (pes_data_len == space_left)
   {
 #if DEBUG_THIS
@@ -494,7 +494,7 @@ extern int write_ES_as_TS_PES_packet(TS_writer_p output,
 #if DEBUG_WRITE_PACKETS
   fprint_msg("||  ES as TS/PES, pid %x (%d)\n",pid,pid);
 #endif
-  
+
   PES_header(data_len,stream_id,FALSE,0,FALSE,0,pes_hdr,&pes_hdr_len);
 
   return write_some_TS_PES_packet(output,pes_hdr,pes_hdr_len,
@@ -704,7 +704,7 @@ static int TS_program_packet_hdr(uint32_t pid,
                pid,data_len);
     return 1;
   }
-  
+
   // We always start with a sync_byte to identify this as a
   // Transport Stream packet
 
@@ -730,7 +730,7 @@ static int TS_program_packet_hdr(uint32_t pid,
 
 /*
  * Write out a Transport Stream PAT and PMT, for a single stream.
- * 
+ *
  * - `output` is the TS output context returned by `tswrite_open`
  * - `transport_stream_id` is the id for this particular transport stream.
  * - `program_number` is the program number to use for the PID.
@@ -795,7 +795,7 @@ extern int write_TS_program_data(TS_writer_p output,
 
 /*
  * Write out a Transport Stream PAT and PMT, for multiple streams.
- * 
+ *
  * - `output` is the TS output context returned by `tswrite_open`
  * - `transport_stream_id` is the id for this particular transport stream.
  * - `program_number` is the program number to use for the PMT PID.
@@ -865,7 +865,7 @@ extern int write_TS_program_data2(TS_writer_p output,
 
 /*
  * Write out a Transport Stream PAT.
- * 
+ *
  * - `output` is the TS output context returned by `tswrite_open`
  * - `transport_stream_id` is the id for this particular transport stream.
  * - `prog_list` is a PIDINT list of program number / PID pairs.
@@ -961,7 +961,7 @@ extern int write_pat(TS_writer_p    output,
 
 /*
  * Write out a Transport Stream PMT, given a PMT datastructure
- * 
+ *
  * - `output` is the TS output context returned by `tswrite_open`
  * - `pmt_pid` is the PID for the PMT.
  * - 'pmt' is the datastructure containing the PMT information
@@ -1081,7 +1081,7 @@ extern int write_pmt(TS_writer_p output,
 /*
  * Write out a Transport Stream PAT and PMT, given the appropriate
  * datastructures
- * 
+ *
  * - `output` is the TS output context returned by `tswrite_open`
  * - `transport_stream_id` is the id for this particular transport stream.
  * - `prog_list` is a PIDINT list of program number / PID pairs.
@@ -1106,7 +1106,7 @@ extern int write_pat_and_pmt(TS_writer_p    output,
 
 /*
  * Write out a Transport Stream PAT, for a single program.
- * 
+ *
  * - `output` is the TS output context returned by `tswrite_open`
  * - `transport_stream_id` is the id for this particular transport stream.
  * - `program_number` is the program number to use for the PID.
@@ -1146,7 +1146,7 @@ extern int write_single_program_pat(TS_writer_p output,
  * Write out a Transport Stream Null packet.
  *
  * - `output` is the TS output context returned by `tswrite_open`
- * 
+ *
  * Returns 0 if it worked, 1 if something went wrong.
  */
 extern int write_TS_null_packet(TS_writer_p output)
@@ -1242,7 +1242,7 @@ extern int build_TS_reader(int           file,
  */
 extern int build_TS_reader_with_fns(void *handle,
                                     int (*read_fn)(void *, byte *, size_t),
-                                    int (*seek_fn)(void *, offset_t), 
+                                    int (*seek_fn)(void *, offset_t),
                                     TS_reader_p *tsreader)
 {
   TS_reader_p new;
@@ -1355,7 +1355,7 @@ extern int seek_using_TS_reader(TS_reader_p  tsreader,
       return seek_file(tsreader->file,posn);
     }
 }
-  
+
 /*
  * Read the next several TS packets, possibly not from the start
  *
@@ -1445,7 +1445,7 @@ static int read_next_TS_packets(TS_reader_p  tsreader,
  * input file, to determine if the file is TS or PS.
  *
  * - `tsreader` is the TS packet reading context
- * - `start` is the first four bytes of the file 
+ * - `start` is the first four bytes of the file
  * - `packet` is (a pointer to) the resultant TS packet.
  *
  *   This is a pointer into the reader's read-ahead buffer, and so should not
@@ -1938,7 +1938,107 @@ extern void get_PCR_from_adaptation_field(byte     adapt[],
     *got_pcr = FALSE;
   return;
 }
-
+
+/*
+ * Retrieve the Private Adaption Data
+ *
+ * - `adapt` is the adaptation field content
+ * - `adapt_len` is its length
+ * - `got_private` is TRUE if the adaptation field contains a PCR
+ * - `private_adaption_data` is then the data
+ */
+static void get_private_adaptation_data(  byte     adapt[],
+                                          int      adapt_len,
+                                          int     *got_private,
+                                          byte    **private,
+                                          int     *private_length)
+{
+  byte offset = 0;
+  *got_private = FALSE;
+
+  if (adapt_len == 0 || adapt == NULL)
+    *got_private = FALSE;
+  else if (adapt[0] & 0x02)  // We have private data
+  {
+    offset = 1; // flags
+
+    if( adapt[0] & 0x10 ) // PCR
+      offset += 6;
+
+    if( adapt[0] & 0x08 ) // OPCR
+      offset += 6;
+
+    if( adapt[0] & 0x04 ) // splicing_point_flag
+      offset += 1;
+
+    if( adapt[0] & 0x02 ) // transport_private_data
+    {
+
+      // should check that we don't go over packet boundary.
+      if( (adapt_len-offset) >= adapt[offset] )
+      {
+        *got_private = TRUE;
+
+        *private_length = adapt[offset];
+        *private = &adapt[offset];
+      }
+      else
+      {
+        fprint_msg("Private Data offset %d would exceed adaption field boundary %d \n", adapt[offset], (adapt_len-offset) );
+      }
+    }
+
+
+  }
+  else
+    *got_private = FALSE;
+  return;
+}
+
+
+static void get_adaptation_EBP_marker (     ebp_t       ebp,
+                                            byte        private[],
+                                            int         private_length)
+{
+  byte length = 0;
+  byte offset = 0;
+
+  if( private[0] == 0xDF )
+  {
+    length = private[1];
+
+    if( length > private_length )
+    {
+      // Error
+    }
+
+    if( length > 0 )
+    {
+        offset = 2;
+
+        if( private[offset+0] == 'E' &&
+            private[offset+1] == 'B' &&
+            private[offset+2] == 'P' &&
+            private[offset+3] == '0' )
+        {
+          offset += 4;
+          ebp->flags =   private[offset];
+        }
+    }
+    else
+    {
+      // Warning : No length
+    }
+
+
+
+  }
+
+
+
+}
+
+
 /*
  * Report on the contents of this TS packet's adaptation field
  *
@@ -1947,37 +2047,64 @@ extern void get_PCR_from_adaptation_field(byte     adapt[],
  *
  * Returns 0 if all went well, 1 if something went wrong.
  */
-extern void report_adaptation_field(byte        adapt[],
-                                    int         adapt_len)
-{
-  int      got_pcr;
-  uint64_t pcr;
+ extern void report_adaptation_field(byte        adapt[],
+                                     int         adapt_len)
+ {
+   int      got_pcr;
+   int      got_private;
+   byte     *private;
+   int      private_len;
+   uint64_t pcr;
+   struct   ebp marker = {0};
 
-  if (adapt_len == 0 || adapt == NULL)
-    return;
+   if (adapt_len == 0 || adapt == NULL)
+     return;
 
-  fprint_msg("  Adaptation field len %3d [flags %02x]",adapt_len,adapt[0]);
-  if (adapt[0] != 0)
-  {
-    print_msg(":");
-    if (ON(adapt[0],0x80)) print_msg(" discontinuity ");
-    if (ON(adapt[0],0x40)) print_msg(" random access ");
-    if (ON(adapt[0],0x20)) print_msg(" ES-priority ");
-    if (ON(adapt[0],0x10)) print_msg(" PCR ");
-    if (ON(adapt[0],0x08)) print_msg(" OPCR ");
-    if (ON(adapt[0],0x04)) print_msg(" splicing ");
-    if (ON(adapt[0],0x02)) print_msg(" private ");
-    if (ON(adapt[0],0x01)) print_msg(" extension ");
-  }
-  print_msg("\n");
+   fprint_msg("  Adaptation field len %3d [flags %02x]",adapt_len,adapt[0]);
+   if (adapt[0] != 0)
+   {
+     print_msg(":");
+     if (ON(adapt[0],0x80)) print_msg(" discontinuity ");
+     if (ON(adapt[0],0x40)) print_msg(" random access ");
+     if (ON(adapt[0],0x20)) print_msg(" ES-priority ");
+     if (ON(adapt[0],0x10)) print_msg(" PCR ");
+     if (ON(adapt[0],0x08)) print_msg(" OPCR ");
+     if (ON(adapt[0],0x04)) print_msg(" splicing ");
+     if (ON(adapt[0],0x02)) print_msg(" private ");
+     if (ON(adapt[0],0x01)) print_msg(" extension ");
+   }
+   print_msg("\n");
 
-  get_PCR_from_adaptation_field(adapt,adapt_len,&got_pcr,&pcr);
-  if (got_pcr)
-  {
-    fprint_msg(" .. PCR %12" LLU_FORMAT_STUMP "\n", pcr);
-  }
-  return;
-}
+   get_PCR_from_adaptation_field(adapt,adapt_len,&got_pcr,&pcr);
+   if (got_pcr)
+   {
+     fprint_msg("    PCR %12" LLU_FORMAT_STUMP "\n", pcr);
+   }
+
+
+   get_private_adaptation_data(adapt,adapt_len,&got_private,&private, &private_len);
+
+   if( got_private )
+   {
+     print_data(TRUE,"    Private data",private,private_len,1000);
+
+     // AssumesEBP is first
+     get_adaptation_EBP_marker(  &marker, private+1, private_len-1 );
+     fprint_msg("    EBP flags : " );
+     if (ON(marker.flags,0x80)) print_msg(" fragment ");
+     if (ON(marker.flags,0x40)) print_msg(" segment ");
+     if (ON(marker.flags,0x20)) print_msg(" SAP ");
+     if (ON(marker.flags,0x10)) print_msg(" grouping ");
+     if (ON(marker.flags,0x08)) print_msg(" time ");
+     if (ON(marker.flags,0x04)) print_msg(" concealment ");
+     if (ON(marker.flags,0x01)) print_msg(" extention ");
+     fprint_msg("\n" );
+
+   }
+
+   return;
+ }
+
 
 /*
  * Report on the timing information from this TS packet's adaptation field
@@ -1996,14 +2123,49 @@ extern void report_adaptation_timing(timing_p    times,
                                      int         packet_count)
 {
   int      got_pcr;
+  int      got_private;
+  byte     *private;
+  int      private_len;
+  struct   ebp marker = {0};
+
   uint64_t pcr;
 
   if (adapt_len == 0 || adapt == NULL || times == NULL)
     return;
 
   get_PCR_from_adaptation_field(adapt,adapt_len,&got_pcr,&pcr);
+
+  get_private_adaptation_data(adapt,adapt_len,&got_private,&private, &private_len);
+  if( got_private )
+  {
+    get_adaptation_EBP_marker(  &marker, private+1, private_len-1 );
+  }
+
   if (got_pcr)
   {
+    if (got_private)
+    {
+      // fragment
+      if (ON(marker.flags,0x80))
+      {
+        if (!times->had_first_fragment)
+        {
+          times->last_fragment_pcr = times->first_fragment_pcr = pcr;
+          times->had_first_fragment = TRUE;
+        }
+      }
+
+      // segment
+      if (ON(marker.flags,0x40))
+      {
+        if (!times->had_first_segment)
+        {
+          times->last_segment_pcr = times->first_segment_pcr = pcr;
+          times->had_first_segment = TRUE;
+        }
+      }
+    }
+
     fprint_msg(" .. PCR %12" LLU_FORMAT_STUMP, pcr);
     if (!times->had_first_pcr)
     {
@@ -2024,6 +2186,25 @@ extern void report_adaptation_timing(timing_p    times,
         fprint_msg(" byterate %7" LLU_FORMAT_STUMP,
                    ((packet_count - times->last_pcr_packet) * TS_PACKET_SIZE) *
                    TWENTY_SEVEN_MHZ / pcr_unsigned_diff(pcr, times->last_pcr));
+
+       if (got_private)
+       {
+
+         if (ON(marker.flags, 0x80))
+         {
+           fprint_msg(" Last fragment % " LLU_FORMAT_STUMP ,
+            (pcr_unsigned_diff (pcr, times->last_fragment_pcr ) *1000) / TWENTY_SEVEN_MHZ) ;
+            times->last_fragment_pcr = pcr;
+
+         }
+         if (ON(marker.flags, 0x40))
+         {
+           fprint_msg(" Last segment %" LLU_FORMAT_STUMP,
+                        (pcr_unsigned_diff(pcr, times->last_segment_pcr) *1000) / TWENTY_SEVEN_MHZ );
+           times->last_segment_pcr = pcr;
+
+         }
+       }
       }
     }
     times->last_pcr_packet = packet_count;
@@ -2032,6 +2213,8 @@ extern void report_adaptation_timing(timing_p    times,
   }
   return;
 }
+
+
 
 /*
  * Report on the contents of this TS packet's payload. The packet is assumed
@@ -2850,7 +3033,7 @@ extern int print_descriptors(int    is_msg,
           fprint_msg_or_err(is_msg, "    (%s)\n", dvb_component_type3_str(subtitling_type));
           if (leader1 != NULL) fprint_msg_or_err(is_msg,"%s",leader1);
           if (leader2 != NULL) fprint_msg_or_err(is_msg,"%s",leader2);
-          fprint_msg_or_err(is_msg, 
+          fprint_msg_or_err(is_msg,
             "  composition_page_id=%u, ancillary_page_id=%u\n",
             composition_page_id, ancillary_page_id);
         }
@@ -2907,7 +3090,7 @@ extern int print_descriptors(int    is_msg,
  *   `data_len`, then the PAT/PMT packet data is complete.
  *
  * Usage:
- *  
+ *
  *  If a PSI packet has PUSI set, then it is the first packet of said PSI
  *  (which, for our purposes, means PAT or PMT). If it does not, then it
  *  is a continuation. If PUSI was set, call this with ``data`` NULL, otherwise
@@ -3497,7 +3680,7 @@ extern int split_TS_packet(byte      buf[TS_PACKET_SIZE],
     *payload_len = 0;
     return 0;
   }
-  
+
   adaptation_field_control = (buf[3] & 0x30) >> 4;
   switch (adaptation_field_control)
   {
@@ -3625,7 +3808,7 @@ extern int find_pat(TS_reader_p     tsreader,
   *prog_list = NULL;
   *num_read  = 0;
   if (!quiet) print_msg("Locating first PAT\n");
-  
+
   for (;;)
   {
     uint32_t pid;
@@ -3690,7 +3873,7 @@ extern int find_pat(TS_reader_p     tsreader,
         return err;
       }
     }
-    
+
     if (max > 0 && *num_read >= max)
     {
       if (!quiet) fprint_msg("Stopping after %d TS packets\n",max);
@@ -3806,7 +3989,7 @@ extern int find_next_pmt(TS_reader_p     tsreader,
         pmt_program_number = *pmt == NULL ? -1 : (int)((*pmt)->program_number);
 
         if (pmt_data)
-        {  
+        {
           free(pmt_data);
           pmt_data = NULL;
         }

@@ -908,7 +908,7 @@ static int report_ts(TS_reader_p  tsreader,
   int           err;
   int           count = 0;
   timing_p      time_ptr = NULL;
-  
+
 
   byte     *pat_data = NULL;
   int       pat_data_len = 0;
@@ -1148,8 +1148,10 @@ static int report_ts(TS_reader_p  tsreader,
         stream_type = -1;
       else
         stream_type = stream->stream_type;
-      report_payload(show_data,stream_type,payload,payload_len,
-                     payload_unit_start_indicator);
+        report_payload(show_data,stream_type,payload,payload_len,
+                       payload_unit_start_indicator);
+
+
       if (!show_data && payload_unit_start_indicator)
       {
         print_data(TRUE,"  Data",payload,payload_len,20);

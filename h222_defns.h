@@ -219,6 +219,15 @@ struct timing
 };
 typedef struct timing *timing_p;
 
+struct adaptation
+{
+  byte       flags;          //adapation flags
+  uint64_t   pcr;            // PCR   -if flag set
+  uint64_t   opcr;           // OPCR  -if flag set
+  byte       ebp_flags;      // if marker found ( private flag etc .. )
+};
+typedef struct adaptation *adapt_t;
+
 struct ebp
 {
   int      segment;

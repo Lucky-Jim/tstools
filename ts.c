@@ -1939,104 +1939,169 @@ extern void get_PCR_from_adaptation_field(byte     adapt[],
   return;
 }
 
+
+
 /*
- * Retrieve the Private Adaption Data
+ * Get PCR value from the Adaption field
  *
- * - `adapt` is the adaptation field content
- * - `adapt_len` is its length
- * - `got_private` is TRUE if the adaptation field contains a PCR
- * - `private_adaption_data` is then the data
+ * - `pcr` array of 6 bytes containing PCR
+ *
+ *
  */
-static void get_private_adaptation_data(  byte     adapt[],
-                                          int      adapt_len,
-                                          int     *got_private,
-                                          byte    **private,
-                                          int     *private_length)
+static  uint64_t get_pcr( byte pcr[] )
 {
-  byte offset = 0;
-  *got_private = FALSE;
+ uint64_t result;
 
-  if (adapt_len == 0 || adapt == NULL)
-    *got_private = FALSE;
-  else if (adapt[0] & 0x02)  // We have private data
+ result = ((uint64_t)pcr[0] << 25) | (pcr[1] << 17) | (pcr[2] << 9) |
+   (pcr[3] << 1) | (pcr[4] >> 7);
+ // Plus the program clock reference extension
+ result = ((result) * 300) + ((pcr[4] & 1) << 8) + pcr[5];
+
+ return result;
+}
+
+
+/*
+ * Get Parsed addaption structure .
+ *
+ * - `pcr` array of 6 bytes containing PCR
+ *
+ *
+ */
+extern void get_adaptation_data( adapt_t adaptation, byte adapt[],  int adapt_len )
+{
+  int ii = 0;
+
+  if ( adaptation == NULL || adapt_len == 0 || adapt == NULL)
+    return;
+
+  //print_data(TRUE,"    Adapt data",adapt,adapt_len,1000);
+
+  adaptation->flags = adapt[ii];
+
+  // Check we're not breaching the buffer
+  if( ++ii > adapt_len )
   {
-    offset = 1; // flags
+     fprint_msg("  Adaptation field size error *1\n" );
+     return;
+  }
 
-    if( adapt[0] & 0x10 ) // PCR
-      offset += 6;
-
-    if( adapt[0] & 0x08 ) // OPCR
-      offset += 6;
-
-    if( adapt[0] & 0x04 ) // splicing_point_flag
-      offset += 1;
-
-    if( adapt[0] & 0x02 ) // transport_private_data
-    {
-
-      // should check that we don't go over packet boundary.
-      if( (adapt_len-offset) >= adapt[offset] )
-      {
-        *got_private = TRUE;
-
-        *private_length = adapt[offset];
-        *private = &adapt[offset];
-      }
-      else
-      {
-        fprint_msg("Private Data offset %d would exceed adaption field boundary %d \n", adapt[offset], (adapt_len-offset) );
-      }
-    }
-
-
+  if( adaptation->flags & 0x10 ) // PCR
+  {
+   // Check we're not breaching the buffer
+   if( ii + 6 > adapt_len ) {
+     fprint_msg("  Adaptation field size error *2\n" );
+     return;
+  }
+    adaptation->pcr = get_pcr( &adapt[ii] );
+    ii+=6;
   }
   else
-    *got_private = FALSE;
-  return;
-}
-
-
-static void get_adaptation_EBP_marker (     ebp_t       ebp,
-                                            byte        private[],
-                                            int         private_length)
-{
-  byte length = 0;
-  byte offset = 0;
-
-  if( private[0] == 0xDF )
   {
-    length = private[1];
-
-    if( length > private_length )
-    {
-      // Error
-    }
-
-    if( length > 0 )
-    {
-        offset = 2;
-
-        if( private[offset+0] == 'E' &&
-            private[offset+1] == 'B' &&
-            private[offset+2] == 'P' &&
-            private[offset+3] == '0' )
-        {
-          offset += 4;
-          ebp->flags =   private[offset];
-        }
-    }
-    else
-    {
-      // Warning : No length
-    }
-
-
-
+    adaptation->pcr = 0;
   }
 
+  if( adaptation->flags & 0x08 ) // OPCR
+  {
+   // Check we're not breaching the buffer
+   if( ii + 6 > adapt_len ) {
+     fprint_msg("  Adaptation field size error *3\n" );
+     return;
+   }
+   adaptation->opcr = get_pcr( &adapt[ii] );
+   ii+=6;
+  }
+  else
+  {
+    adaptation->opcr = 0;
+  }
 
+  if( adaptation->flags & 0x04 ) // splicing_point_flag
+    ii += 1;
+
+  if( adaptation->flags & 0x02 ) // transport_private_data
+  {
+
+
+
+   // should check that we don't go over packet boundary.
+   if( (adapt_len-ii) >= adapt[ii] )
+   {
+     // Check we're not breaching the buffer
+     if( ii + adapt[ii] > adapt_len ) {
+       fprint_msg("  Adaptation field size error *4\n" );
+       return;
+     }
+     ii++;
+
+     // Private Data
+     if( adapt[ii] == 0xDF )
+     {
+       int length = adapt[ii+1];
+
+       if( (ii + length) > adapt_len )
+       {
+         fprint_msg("  Adaptation field size error *4\n" );
+         return;
+       }
+
+       if( length > 0 )
+       {
+           ii+=2;
+           if( adapt[ii+0] == 'E' &&
+               adapt[ii+1] == 'B' &&
+               adapt[ii+2] == 'P' &&
+               adapt[ii+3] == '0' )
+           {
+             ii += 4;
+             adaptation->ebp_flags =   adapt[ii];
+           }
+       }
+       else
+       {
+         fprint_msg("  Adaptation field : private data - length = 0 \n" );
+       }
+     }
+   }
+   else
+   {
+     fprint_msg("Private Data offset %d would exceed adaption field boundary %d \n", adapt[ii], (adapt_len-ii) );
+   }
+  }
+}
+
+
+static void print_adapt_data( adapt_t adapt )
+{
+   fprint_msg("Adaptation flags : " );
+   if (ON(adapt->flags,0x80)) print_msg(" discontinuity ");
+   if (ON(adapt->flags,0x40)) print_msg(" random access ");
+   if (ON(adapt->flags,0x20)) print_msg(" ES-priority ");
+   if (ON(adapt->flags,0x10)) print_msg(" PCR ");
+   if (ON(adapt->flags,0x08)) print_msg(" OPCR ");
+   if (ON(adapt->flags,0x04)) print_msg(" splicing ");
+   if (ON(adapt->flags,0x02)) print_msg(" private ");
+   if (ON(adapt->flags,0x01)) print_msg(" extension ");
+
+
+   fprint_msg("    EBP flags : " );
+   if (ON(adapt->ebp_flags,0x80)) print_msg(" fragment ");
+   if (ON(adapt->ebp_flags,0x40)) print_msg(" segment ");
+   if (ON(adapt->ebp_flags,0x20)) print_msg(" SAP ");
+   if (ON(adapt->ebp_flags,0x10)) print_msg(" grouping ");
+   if (ON(adapt->ebp_flags,0x08)) print_msg(" time ");
+   if (ON(adapt->ebp_flags,0x04)) print_msg(" concealment ");
+   if (ON(adapt->ebp_flags,0x01)) print_msg(" extention ");
+   fprint_msg("\n" );
+
+   if (ON(adapt->flags,0x10))
+    fprint_msg("    PCR %12" LLU_FORMAT_STUMP "\n", adapt->pcr);
+
+   if (ON(adapt->flags,0x08))
+    fprint_msg("   OPCR %12" LLU_FORMAT_STUMP "\n", adapt->opcr);
 
 }
+
 
 
 /*
@@ -2047,63 +2112,25 @@ static void get_adaptation_EBP_marker (     ebp_t       ebp,
  *
  * Returns 0 if all went well, 1 if something went wrong.
  */
- extern void report_adaptation_field(byte        adapt[],
+ extern void report_adaptation_field(byte        adapt_buffer[],
                                      int         adapt_len)
  {
-   int      got_pcr;
-   int      got_private;
-   byte     *private;
-   int      private_len;
-   uint64_t pcr;
-   struct   ebp marker = {0};
+   struct   adaptation adapt_struct = {0};
+   adapt_t  adapt = &adapt_struct;
 
-   if (adapt_len == 0 || adapt == NULL)
+
+   if (adapt_len == 0 || adapt_buffer == NULL)
      return;
 
-   fprint_msg("  Adaptation field len %3d [flags %02x]",adapt_len,adapt[0]);
-   if (adapt[0] != 0)
-   {
-     print_msg(":");
-     if (ON(adapt[0],0x80)) print_msg(" discontinuity ");
-     if (ON(adapt[0],0x40)) print_msg(" random access ");
-     if (ON(adapt[0],0x20)) print_msg(" ES-priority ");
-     if (ON(adapt[0],0x10)) print_msg(" PCR ");
-     if (ON(adapt[0],0x08)) print_msg(" OPCR ");
-     if (ON(adapt[0],0x04)) print_msg(" splicing ");
-     if (ON(adapt[0],0x02)) print_msg(" private ");
-     if (ON(adapt[0],0x01)) print_msg(" extension ");
-   }
-   print_msg("\n");
-
-   get_PCR_from_adaptation_field(adapt,adapt_len,&got_pcr,&pcr);
-   if (got_pcr)
-   {
-     fprint_msg("    PCR %12" LLU_FORMAT_STUMP "\n", pcr);
-   }
-
-
-   get_private_adaptation_data(adapt,adapt_len,&got_private,&private, &private_len);
-
-   if( got_private )
-   {
-     print_data(TRUE,"    Private data",private,private_len,1000);
-
-     // AssumesEBP is first
-     get_adaptation_EBP_marker(  &marker, private+1, private_len-1 );
-     fprint_msg("    EBP flags : " );
-     if (ON(marker.flags,0x80)) print_msg(" fragment ");
-     if (ON(marker.flags,0x40)) print_msg(" segment ");
-     if (ON(marker.flags,0x20)) print_msg(" SAP ");
-     if (ON(marker.flags,0x10)) print_msg(" grouping ");
-     if (ON(marker.flags,0x08)) print_msg(" time ");
-     if (ON(marker.flags,0x04)) print_msg(" concealment ");
-     if (ON(marker.flags,0x01)) print_msg(" extention ");
-     fprint_msg("\n" );
-
-   }
+   //
+   //   Get Adaption Timings, EBP's etc..
+   //
+   get_adaptation_data(adapt , adapt_buffer,adapt_len);
+   print_adapt_data( adapt );
 
    return;
  }
+
 
 
 /*
@@ -2118,53 +2145,46 @@ static void get_adaptation_EBP_marker (     ebp_t       ebp,
  * Returns 0 if all went well, 1 if something went wrong.
  */
 extern void report_adaptation_timing(timing_p    times,
-                                     byte        adapt[],
+                                     byte        adapt_buffer[],
                                      int         adapt_len,
                                      int         packet_count)
 {
-  int      got_pcr;
-  int      got_private;
-  byte     *private;
-  int      private_len;
-  struct   ebp marker = {0};
+  struct   adaptation adapt_struct = {0};
+  adapt_t  adapt = &adapt_struct;
 
-  uint64_t pcr;
 
   if (adapt_len == 0 || adapt == NULL || times == NULL)
     return;
 
-  get_PCR_from_adaptation_field(adapt,adapt_len,&got_pcr,&pcr);
+  //
+  //   Get Adaption Timings, EBP's etc..
+  //
+  get_adaptation_data(adapt, adapt_buffer,adapt_len);
+  print_adapt_data( adapt );
 
-  get_private_adaptation_data(adapt,adapt_len,&got_private,&private, &private_len);
-  if( got_private )
+
+  if (ON(adapt->flags,0x10))
   {
-    get_adaptation_EBP_marker(  &marker, private+1, private_len-1 );
-  }
+    fprint_msg(" .. PCR %12" LLU_FORMAT_STUMP, adapt->pcr);
 
-  if (got_pcr)
-  {
-    fprint_msg(" .. PCR %12" LLU_FORMAT_STUMP, pcr);
-
-    if (got_private)
+    if (ON(adapt->flags,0x02))
     {
-
-
       // fragment
-      if (ON(marker.flags,0x80))
+      if (ON(adapt->ebp_flags,0x80))
       {
         if (!times->had_first_fragment)
         {
-          times->last_fragment_pcr = times->first_fragment_pcr = pcr;
+          times->last_fragment_pcr = times->first_fragment_pcr = adapt->pcr;
           times->had_first_fragment = TRUE;
         }
       }
 
       // segment
-      if (ON(marker.flags,0x40))
+      if (ON(adapt->ebp_flags,0x40))
       {
         if (!times->had_first_segment)
         {
-          times->last_segment_pcr = times->first_segment_pcr = pcr;
+          times->last_segment_pcr = times->first_segment_pcr = adapt->pcr;
           times->had_first_segment = TRUE;
         }
       }
@@ -2173,39 +2193,39 @@ extern void report_adaptation_timing(timing_p    times,
     if (!times->had_first_pcr)
     {
       times->last_pcr_packet = times->first_pcr_packet = packet_count;
-      times->last_pcr = times->first_pcr = pcr;
+      times->last_pcr = times->first_pcr = adapt->pcr;
       times->had_first_pcr = TRUE;
     }
     else
     {
-      if (pcr < times->last_pcr)
+      if (adapt->pcr < times->last_pcr)
         fprint_msg(" Discontinuity: PCR was %7" LLU_FORMAT_STUMP ", now %7"
-                   LLU_FORMAT_STUMP,times->last_pcr,pcr);
+                   LLU_FORMAT_STUMP,times->last_pcr,adapt->pcr);
       else
       {
         fprint_msg(" Mean byterate %7" LLU_FORMAT_STUMP,
                    ((packet_count - times->first_pcr_packet) * TS_PACKET_SIZE) *
-                   TWENTY_SEVEN_MHZ / pcr_unsigned_diff(pcr, times->first_pcr));
+                   TWENTY_SEVEN_MHZ / pcr_unsigned_diff(adapt->pcr, times->first_pcr));
         fprint_msg(" byterate %7" LLU_FORMAT_STUMP,
                    ((packet_count - times->last_pcr_packet) * TS_PACKET_SIZE) *
-                   TWENTY_SEVEN_MHZ / pcr_unsigned_diff(pcr, times->last_pcr));
+                   TWENTY_SEVEN_MHZ / pcr_unsigned_diff(adapt->pcr, times->last_pcr));
 
-       if (got_private)
+       if (adapt)
        {
 
 
-         if (ON(marker.flags, 0x80))
+         if (ON(adapt->ebp_flags, 0x80))
          {
            fprint_msg(" Last fragment % " LLU_FORMAT_STUMP ,
-            (pcr_unsigned_diff (pcr, times->last_fragment_pcr ) *1000) / TWENTY_SEVEN_MHZ) ;
-            times->last_fragment_pcr = pcr;
+            (pcr_unsigned_diff (adapt->pcr, times->last_fragment_pcr ) *1000) / TWENTY_SEVEN_MHZ) ;
+            times->last_fragment_pcr = adapt->pcr;
 
          }
-         if (ON(marker.flags, 0x40))
+         if (ON(adapt->ebp_flags, 0x40))
          {
            fprint_msg(" Last segment %" LLU_FORMAT_STUMP,
-                        (pcr_unsigned_diff(pcr, times->last_segment_pcr) *1000) / TWENTY_SEVEN_MHZ );
-           times->last_segment_pcr = pcr;
+                        (pcr_unsigned_diff(adapt->pcr, times->last_segment_pcr) *1000) / TWENTY_SEVEN_MHZ );
+           times->last_segment_pcr = adapt->pcr;
 
          }
          else
@@ -2216,19 +2236,19 @@ extern void report_adaptation_timing(timing_p    times,
       }
     }
     times->last_pcr_packet = packet_count;
-    times->last_pcr = pcr;
+    times->last_pcr = adapt->pcr;
 
 
-    if( got_private )
+    if( ON(adapt->flags,0x02) )
     {
       fprint_msg("    EBP flags( " );
-      if (ON(marker.flags,0x80)) print_msg(" fragment ");
-      if (ON(marker.flags,0x40)) print_msg(" segment ");
-      if (ON(marker.flags,0x20)) print_msg(" SAP ");
-      if (ON(marker.flags,0x10)) print_msg(" grouping ");
-      if (ON(marker.flags,0x08)) print_msg(" time ");
-      if (ON(marker.flags,0x04)) print_msg(" concealment ");
-      if (ON(marker.flags,0x01)) print_msg(" extention ");
+      if (ON(adapt->ebp_flags,0x80)) print_msg(" fragment ");
+      if (ON(adapt->ebp_flags,0x40)) print_msg(" segment ");
+      if (ON(adapt->ebp_flags,0x20)) print_msg(" SAP ");
+      if (ON(adapt->ebp_flags,0x10)) print_msg(" grouping ");
+      if (ON(adapt->ebp_flags,0x08)) print_msg(" time ");
+      if (ON(adapt->ebp_flags,0x04)) print_msg(" concealment ");
+      if (ON(adapt->ebp_flags,0x01)) print_msg(" extention ");
       fprint_msg(")" );
 
     }

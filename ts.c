@@ -2122,6 +2122,7 @@ static void print_adapt_data( adapt_t adapt )
    if (adapt_len == 0 || adapt_buffer == NULL)
      return;
 
+   print_data(TRUE,"    Adapt data",adapt_buffer,adapt_len,1000);
    //
    //   Get Adaption Timings, EBP's etc..
    //
